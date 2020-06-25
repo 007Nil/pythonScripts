@@ -31,9 +31,9 @@ def convert_to_dict(list):
     res_dct = {list[i]: list[i + 1] for i in range(0, len(list), 2)}
     return res_dct
 
-
+# SNS CLIENT
 def sns_function():
-    topic_arn = "arn:aws:sns:ap-south-1:254018427142:EC2TestTopic"
+    topic_arn = "YOUR-ARN"
     sns_clinet = boto3.client(
         'sns',
         region_name="ap-south-1"
@@ -56,7 +56,7 @@ node_details = []
 ec2_client = boto3.client(service_name="ec2", region_name="ap-south-1")
 ec2_instance_details = ec2_client.describe_instances()
 
-# SNS CLIENT
+
 
 for each_instance in ec2_instance_details['Reservations']:
     # print(each_instance)
