@@ -1,4 +1,5 @@
 import boto3
+import json
 
 # using resource
 '''
@@ -16,20 +17,47 @@ class Ec2InstanceDetails:
         self.instance_id = instance_id
 
 
+class NodeDetails:
+    def __init__(self, nodename=None, node_state=None):
+        self.nodename = nodename
+        self.node_state = node_state
+
+    def dic(self):
+        dic = {"Node Name":  self.nodename, "Node State":  self.node_state}
+        return dic
+
+
+def convert_to_dict(list):
+    res_dct = {list[i]: list[i + 1] for i in range(0, len(list), 2)}
+    return res_dct
+
+
+def sns_function():
+    topic_arn = "arn:aws:sns:ap-south-1:254018427142:EC2TestTopic"
+    sns_clinet = boto3.client(
+        'sns',
+        region_name="ap-south-1"
+    )
+
+    publicObject = {}
+
+
 # Declare variables for search instances
 node_name = "c01-1"
-cluster_name = "c02"
+cluster_name = "c01"
 count_node = 0
 count_cluster = 0
 terminated = "terminated"
-# tag_key_cluster_values = []
-# tag_key_node_values = []
 instance_requried_details = []
 list_of_tags = []
+node_details = []
 
+# EC2 INSTANCE CLIENT
 ec2_client = boto3.client(service_name="ec2", region_name="ap-south-1")
 ec2_instance_details = ec2_client.describe_instances()
-# print(ec2_instance_details)
+
+# SNS CLIENT
+
 for each_instance in ec2_instance_details['Reservations']:
     # print(each_instance)
     for each_instance_requried_details in each_instance['Instances']:
@@ -73,18 +101,26 @@ for each_list_of_tags in list_of_tags:
         #     print("Cluster Not Found")
 
     # print("Cluster ")
+
 if count_node > 0:
-    print("Cluster " + cluster_name + " contains " + str(count_node) + " nodes")
-    print("Node status Details -----")
+    # print("Cluster " + cluster_name + " contains " + str(count_node) + " nodes")
+    # print("Node status Details -----")
 
     for each_instance_list_data in instance_requried_details:
         for each_instance_list_data_in_tags in each_instance_list_data.tags:
             # print(each_instance_list_data_in_tags["Value"])
             if each_instance_list_data_in_tags["Value"] == cluster_name:
-                # print(each_instance_list_data.tags)
+
                 for tag_name in each_instance_list_data.tags:
                     if tag_name["Key"] == "Name":
-                        print("Node Name: "+tag_name["Value"]+" State:" +each_instance_list_data.state)
-                # print(each_instance_list_data.state)
+                        node_details.append(NodeDetails(tag_name["Value"], each_instance_list_data.state).dic())
+
+    publish_object = {"Cluster Name": cluster_name, "Node Count": str(count_node),
+                      "Node details": node_details}
+
+    print(json.dumps(publish_object))
+
 else:
     print("Cluster " + cluster_name + " contains 0 nodes, Since it does not exist")
+    publish_object = {"Cluster Name": cluster_name, "Node Count": str(count_node), "Node details": node_details}
+    print(json.dumps(publish_object))
