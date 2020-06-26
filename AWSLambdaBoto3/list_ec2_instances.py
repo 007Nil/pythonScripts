@@ -1,15 +1,20 @@
+# Author : Sagnik Sarkar
 import boto3
+from botocore.exceptions import ClientError
 import json
+from pprint import pprint
 
-# using resource
-'''
-ec2_resource = boto3.resource(service_name="ec2",region_name="ap-south-1")
+# Declare variables for search instances
+cluster_name = "c01"
+count_node = 0
+terminated = "terminated"
+# Defining Lists
+instance_required_details = []
+list_of_tags = []
+node_details = []
 
-for each_instance in ec2_resource.instances.all():
-    print(each_instance.id, each_instance.state['Name'])
-'''
 
-
+#  Class Definition
 class Ec2InstanceDetails:
     def __init__(self, instance_id=None, tags=None, state=None):
         self.state = state
@@ -22,72 +27,108 @@ class NodeDetails:
         self.nodename = nodename
         self.node_state = node_state
 
-    def dic(self):
-        dic = {"Node Name":  self.nodename, "Node State":  self.node_state}
-        return dic
+    def dict(self):
+        dict = {"Node Name": self.nodename, "Node State": self.node_state}
+        return dict
 
 
-def convert_to_dict(list):
-    res_dct = {list[i]: list[i + 1] for i in range(0, len(list), 2)}
-    return res_dct
+# ses configurations
+def ses_function(info_data):
+    sender = "Sagnik Sarkar<>"
+    recipient = ""
+    aws_region = "ap-south-1"
+    table_details = ""
+    for info_data_each_node_details in info_data['Node details']:
+        table_details += "<tr><td align='center'>" + info_data_each_node_details['Node Name'] + "</td><td " \
+                                                                                                "align='center'>" + \
+                         info_data_each_node_details['Node State'] + "</td></tr>"
 
-# SNS CLIENT
-def sns_function():
-    topic_arn = "YOUR-ARN"
-    sns_clinet = boto3.client(
+    # print(table_details)
+    subject = "EC2 instance monitoring details based on Cluster<Chamber> Name"
+
+    body_text = "This email was sent with Amazon SES using the AWS SDK for Python (Boto3)."
+
+    body_html = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><meta name='viewport' " \
+                "content='width=device-width, initial-scale=1.0'><title>Document</title></head><body><p " \
+                "align='center'>Cluster Name: "+info_data["Cluster Name"]+"</p><p align='center'>Node Count: "+info_data["Node Count"]+"</p><p align='center'>Node " \
+                "details</p><table style='width:50%' align='center'><tr><th>Node Name</th><th>Node " \
+                "State</th></tr>"+table_details+"</table></body></html>"
+
+    CHARSET = "UTF-8"
+
+    # Create a new SES resource and specify a region.
+    client = boto3.client('ses', region_name=aws_region)
+
+    # Try to send the email.
+    try:
+        # Provide the contents of the email.
+        response = client.send_email(
+            Destination={
+                'ToAddresses': [
+                    recipient,
+                ],
+            },
+            Message={
+                'Body': {
+                    'Html': {
+                        'Charset': CHARSET,
+                        'Data': body_html,
+                    },
+                    'Text': {
+                        'Charset': CHARSET,
+                        'Data': body_text,
+                    },
+                },
+                'Subject': {
+                    'Charset': CHARSET,
+                    'Data': subject,
+                },
+            },
+            Source=sender,
+        )
+    # Display an error if something goes wrong.
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+    else:
+        print("Email sent! Message ID:"),
+        print(response['MessageId'])
+
+
+# sns topic function
+def sns_function(json_data):
+    topic_arn = "arn:aws:sns:ap-south-1:254018427142:EC2TestTopic"
+    sns_client = boto3.client(
         'sns',
         region_name="ap-south-1"
     )
 
-    publicObject = {}
+    publicObject = json_data
+    # print(publicObject)
 
+    response = sns_client.publish(TopicArn=topic_arn,
+                                  Message=publicObject,
+                                  )
 
-# Declare variables for search instances
-node_name = "c01-1"
-cluster_name = "c01"
-count_node = 0
-count_cluster = 0
-terminated = "terminated"
-instance_requried_details = []
-list_of_tags = []
-node_details = []
+    print(response["ResponseMetadata"]["HTTPStatusCode"])
+
 
 # EC2 INSTANCE CLIENT
 ec2_client = boto3.client(service_name="ec2", region_name="ap-south-1")
 ec2_instance_details = ec2_client.describe_instances()
 
-
-
+# preparing required Data
 for each_instance in ec2_instance_details['Reservations']:
-    # print(each_instance)
+
     for each_instance_requried_details in each_instance['Instances']:
-        # print(each_instance_requried_details)
-        instance_requried_details.append(Ec2InstanceDetails(each_instance_requried_details["InstanceId"],
+        instance_required_details.append(Ec2InstanceDetails(each_instance_requried_details["InstanceId"],
                                                             each_instance_requried_details["Tags"],
                                                             each_instance_requried_details["State"]["Name"]))
-        '''
-        instance_tags = each_instance_requried_details["Tags"]
-        # print(instance_tags)
-        for each_instance_tags in instance_tags:
-            # print(each_instance_tags)
-            if each_instance_tags["Key"] == "Cluster":
-                if each_instance_tags["Value"] not in tag_key_cluster_values:
-                    tag_key_cluster_values.append(each_instance_tags["Value"])
-                # print(tag_key_cluster_values)
-            else:
-                tag_key_node_values.append(each_instance_tags["Value"])
 
-print(tag_key_cluster_values)
-print(tag_key_node_values)
-
-count_cluster = sum(p == cluster_name for p in tag_key_cluster_values)
-# print(count_cluster)
-'''
 # print(instance_requried_details[0].tags[0]["Key"])
 # print(instance_requried_details[0].state,'Cluster Name='+instance_requried_details[0].tags[0]["Value"]
 #       ,'Node Name='+instance_requried_details[0].tags[1]["Value"])
 
-for each_instance_list_data in instance_requried_details:
+for each_instance_list_data in instance_required_details:
     list_of_tags.append(each_instance_list_data.tags)
     # print(each_instance_list_data.tags)
 for each_list_of_tags in list_of_tags:
@@ -106,21 +147,29 @@ if count_node > 0:
     # print("Cluster " + cluster_name + " contains " + str(count_node) + " nodes")
     # print("Node status Details -----")
 
-    for each_instance_list_data in instance_requried_details:
+    for each_instance_list_data in instance_required_details:
         for each_instance_list_data_in_tags in each_instance_list_data.tags:
             # print(each_instance_list_data_in_tags["Value"])
             if each_instance_list_data_in_tags["Value"] == cluster_name:
 
                 for tag_name in each_instance_list_data.tags:
                     if tag_name["Key"] == "Name":
-                        node_details.append(NodeDetails(tag_name["Value"], each_instance_list_data.state).dic())
+                        node_details.append(NodeDetails(tag_name["Value"], each_instance_list_data.state).dict())
 
     publish_object = {"Cluster Name": cluster_name, "Node Count": str(count_node),
                       "Node details": node_details}
 
-    print(json.dumps(publish_object))
+    json_data = json.dumps(publish_object)
+    info = json.loads(json_data)
+    pprint(info)
+    ses_function(info)
+    # pprint(info['Node details'][1]['Node Name'])
+    # for each_node_details in info['Node details']:
+    #     print(each_node_details['Node Name'])
+    # sns_function(json_date)
 
 else:
     print("Cluster " + cluster_name + " contains 0 nodes, Since it does not exist")
     publish_object = {"Cluster Name": cluster_name, "Node Count": str(count_node), "Node details": node_details}
     print(json.dumps(publish_object))
+
